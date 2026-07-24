@@ -1,0 +1,6 @@
+FROM python:3.11-slim
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+WORKDIR /app
+COPY app/data-processor/ .
+USER appuser
+CMD ["python", "processor.py"]

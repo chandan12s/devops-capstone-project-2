@@ -1,0 +1,91 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_HUB_CREDS  = credentials('dockerhub-credentials')
+        DOCKER_HUB_USER   = "${DOCKER_HUB_CREDS_USR}"
+        IMAGE_NAME_API    = "${DOCKER_HUB_CREDS_USR}/analytics-api"
+        IMAGE_NAME_PROC   = "${DOCKER_HUB_CREDS_USR}/analytics-processor"
+        IMAGE_TAG         = "${BUILD_NUMBER}"
+        KUBECONFIG        = "${HOME}/.kube/config"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo "=== Checking out source ==="
+                checkout scm
+                sh 'git log --oneline -3'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                echo "=== Running Python unit tests ==="
+                sh '''
+                    pip3 install -r product-docker/app/api/requirements.txt \
+                        --quiet --break-system-packages
+                    python3 -m pytest product-docker/app/api/test_app.py \
+                        -v --tb=short
+                '''
+            }
+            post {
+                failure {
+                    error "Tests failed — pipeline halted. Fix before merging."
+                }
+            }
+        }
+
+        stage('Build Docker images') {
+            steps {
+                echo "=== Building images (tag: ${IMAGE_TAG}) ==="
+                dir('product-docker') {
+                    sh """
+                        docker build -f Dockerfile.api \
+                            --build-arg APP_VERSION=${IMAGE_TAG} \
+                            -t ${IMAGE_NAME_API}:${IMAGE_TAG} \
+                            -t ${IMAGE_NAME_API}:latest .
+
+                        docker build -f Dockerfile.processor \
+                            -t ${IMAGE_NAME_PROC}:${IMAGE_TAG} \
+                            -t ${IMAGE_NAME_PROC}:latest .
+                    """
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo "=== Pushing to registry ==="
+                sh """
+                    echo "${DOCKER_HUB_CREDS_PSW}" | \
+                        docker login -u "${DOCKER_HUB_CREDS_USR}" --password-stdin
+                    docker push ${IMAGE_NAME_API}:${IMAGE_TAG}
+                    docker push ${IMAGE_NAME_API}:latest
+                    docker push ${IMAGE_NAME_PROC}:${IMAGE_TAG}
+                    docker push ${IMAGE_NAME_PROC}:latest
+                    docker logout
+                """
+            }
+        }
+
+        stage('Cleanup local images') {
+            steps {
+                sh """
+                    docker rmi ${IMAGE_NAME_API}:${IMAGE_TAG} || true
+                    docker rmi ${IMAGE_NAME_PROC}:${IMAGE_TAG} || true
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS — build #${BUILD_NUMBER} pushed to Docker Hub."
+        }
+        failure {
+            echo "FAILED at stage: ${env.STAGE_NAME}"
+        }
+    }
+}
