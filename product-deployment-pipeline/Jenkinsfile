@@ -9,6 +9,10 @@ pipeline {
         IMAGE_TAG         = "${BUILD_NUMBER}"
         KUBECONFIG        = "${HOME}/.kube/config-enterprise"
         K8S_NAMESPACE     = "analytics"
+        K8S_NODE_IP       = sh(
+                              script: "grep 'server:' ${HOME}/.kube/config-enterprise | sed 's|.*https://||' | sed 's|:6443||' | tr -d ' '",
+                              returnStdout: true
+                            ).trim()
     }
 
     stages {
@@ -74,7 +78,6 @@ pipeline {
             steps {
                 echo "=== Deploying build #${IMAGE_TAG} to K8s ==="
                 sh """
-                    # Update image tags to the exact build number
                     kubectl set image deployment/analytics-api \
                         analytics-api=${IMAGE_NAME_API}:${IMAGE_TAG} \
                         -n ${K8S_NAMESPACE}
@@ -83,7 +86,6 @@ pipeline {
                         analytics-processor=${IMAGE_NAME_PROC}:${IMAGE_TAG} \
                         -n ${K8S_NAMESPACE}
 
-                    # Wait for rollout to complete
                     kubectl rollout status deployment/analytics-api \
                         -n ${K8S_NAMESPACE} --timeout=120s
 
@@ -97,35 +99,40 @@ pipeline {
             steps {
                 echo "=== Running smoke test against live cluster ==="
                 sh """
-                    # Give pods a moment to stabilise
                     sleep 10
 
-                    NODE_IP=\$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
-                    echo "Testing against \${NODE_IP}:30080"
+                    echo "Node IP from kubeconfig: ${K8S_NODE_IP}"
 
                     # Health check must return 200
                     HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
-                        http://\${NODE_IP}:30080/health)
+                        --connect-timeout 10 \
+                        http://${K8S_NODE_IP}:30080/health)
+
+                    echo "Health check returned: \${HTTP_CODE}"
 
                     if [ "\${HTTP_CODE}" != "200" ]; then
                         echo "Smoke test FAILED — health returned \${HTTP_CODE}"
                         exit 1
                     fi
 
-                    echo "Smoke test PASSED — health returned 200"
+                    echo "Health check PASSED"
 
                     # Post a real event and verify 201
                     EVENT_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
-                        -X POST http://\${NODE_IP}:30080/api/v1/events \
+                        --connect-timeout 10 \
+                        -X POST http://${K8S_NODE_IP}:30080/api/v1/events \
                         -H "Content-Type: application/json" \
                         -d '{"event_type":"ci_smoke_test","payload":{"build":"${IMAGE_TAG}"}}')
+
+                    echo "Event ingestion returned: \${EVENT_CODE}"
 
                     if [ "\${EVENT_CODE}" != "201" ]; then
                         echo "Event ingestion FAILED — returned \${EVENT_CODE}"
                         exit 1
                     fi
 
-                    echo "Event ingestion PASSED — returned 201"
+                    echo "Event ingestion PASSED"
+                    echo "=== All smoke tests passed ==="
                 """
             }
         }
