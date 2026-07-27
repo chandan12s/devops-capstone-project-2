@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-webapp
+  namespace: analytics
+  labels:
+    app: analytics-webapp
+    version: "1.0.0"
+    environment: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-webapp
+  template:
+    metadata:
+      labels:
+        app: analytics-webapp
+        version: "1.0.0"
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config

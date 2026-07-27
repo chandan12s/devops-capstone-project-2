@@ -7,7 +7,8 @@ pipeline {
         IMAGE_NAME_API    = "${DOCKER_HUB_CREDS_USR}/analytics-api"
         IMAGE_NAME_PROC   = "${DOCKER_HUB_CREDS_USR}/analytics-processor"
         IMAGE_TAG         = "${BUILD_NUMBER}"
-        KUBECONFIG        = "${HOME}/.kube/config"
+        KUBECONFIG        = "${HOME}/.kube/config-enterprise"
+        K8S_NAMESPACE     = "analytics"
     }
 
     stages {
@@ -32,7 +33,7 @@ pipeline {
             }
             post {
                 failure {
-                    error "Tests failed — pipeline halted. Fix before merging."
+                    error "Tests failed — pipeline halted."
                 }
             }
         }
@@ -57,7 +58,6 @@ pipeline {
 
         stage('Push to Docker Hub') {
             steps {
-                echo "=== Pushing to registry ==="
                 sh """
                     echo "${DOCKER_HUB_CREDS_PSW}" | \
                         docker login -u "${DOCKER_HUB_CREDS_USR}" --password-stdin
@@ -66,6 +66,66 @@ pipeline {
                     docker push ${IMAGE_NAME_PROC}:${IMAGE_TAG}
                     docker push ${IMAGE_NAME_PROC}:latest
                     docker logout
+                """
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                echo "=== Deploying build #${IMAGE_TAG} to K8s ==="
+                sh """
+                    # Update image tags to the exact build number
+                    kubectl set image deployment/analytics-api \
+                        analytics-api=${IMAGE_NAME_API}:${IMAGE_TAG} \
+                        -n ${K8S_NAMESPACE}
+
+                    kubectl set image deployment/analytics-processor \
+                        analytics-processor=${IMAGE_NAME_PROC}:${IMAGE_TAG} \
+                        -n ${K8S_NAMESPACE}
+
+                    # Wait for rollout to complete
+                    kubectl rollout status deployment/analytics-api \
+                        -n ${K8S_NAMESPACE} --timeout=120s
+
+                    kubectl rollout status deployment/analytics-processor \
+                        -n ${K8S_NAMESPACE} --timeout=120s
+                """
+            }
+        }
+
+        stage('Smoke test') {
+            steps {
+                echo "=== Running smoke test against live cluster ==="
+                sh """
+                    # Give pods a moment to stabilise
+                    sleep 10
+
+                    NODE_IP=\$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
+                    echo "Testing against \${NODE_IP}:30080"
+
+                    # Health check must return 200
+                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
+                        http://\${NODE_IP}:30080/health)
+
+                    if [ "\${HTTP_CODE}" != "200" ]; then
+                        echo "Smoke test FAILED — health returned \${HTTP_CODE}"
+                        exit 1
+                    fi
+
+                    echo "Smoke test PASSED — health returned 200"
+
+                    # Post a real event and verify 201
+                    EVENT_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
+                        -X POST http://\${NODE_IP}:30080/api/v1/events \
+                        -H "Content-Type: application/json" \
+                        -d '{"event_type":"ci_smoke_test","payload":{"build":"${IMAGE_TAG}"}}')
+
+                    if [ "\${EVENT_CODE}" != "201" ]; then
+                        echo "Event ingestion FAILED — returned \${EVENT_CODE}"
+                        exit 1
+                    fi
+
+                    echo "Event ingestion PASSED — returned 201"
                 """
             }
         }
@@ -82,7 +142,7 @@ pipeline {
 
     post {
         success {
-            echo "SUCCESS — build #${BUILD_NUMBER} pushed to Docker Hub."
+            echo "SUCCESS — build #${IMAGE_TAG} deployed and smoke tested."
         }
         failure {
             echo "FAILED at stage: ${env.STAGE_NAME}"

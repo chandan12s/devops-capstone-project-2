@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: analytics
+  labels:
+    environment: dev
+    project: enterprise-deployment
+    managed-by: kubectl

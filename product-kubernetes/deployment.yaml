@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-api
+  namespace: analytics
+  labels:
+    app: analytics-api
+    version: "1.0.0"
+    environment: dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: analytics-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0       # zero-downtime deploys
+  template:
+    metadata:
+      labels:
+        app: analytics-api
+        version: "1.0.0"
+    spec:
+      # Security: don't run as root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: analytics-api
+          image: chandans12/analytics-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+              name: http
+          # Environment from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: analytics-config
+          # Sensitive env from Secret
+          env:
+            - name: API_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: analytics-secrets
+                  key: api-secret-key
+          # Resource limits — important on t3.small
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+          # Liveness probe — restarts container if unhealthy
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          # Readiness probe — removes from service if not ready
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
