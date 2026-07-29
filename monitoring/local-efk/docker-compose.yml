@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.9
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - efk-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.9
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - efk-net
+
+  fluentd:
+    image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-elasticsearch7-1
+    container_name: fluentd
+    user: root
+    environment:
+      - FLUENTD_SYSTEMD_CONF=disable
+    volumes:
+      - ./fluentd/conf/fluent.conf:/fluentd/etc/fluent.conf
+      # Mount Docker socket so Fluentd can call docker logs
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount docker binary so the exec plugin can call it
+      - /usr/bin/docker:/usr/bin/docker
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - efk-net
+
+volumes:
+  esdata:
+
+networks:
+  efk-net:
+    external: true
+    name: analytics-local

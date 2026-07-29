@@ -1,9 +1,19 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'DEPLOY_ENV',
+            choices: ['dev', 'stage', 'prod'],
+            description: 'Target deployment environment'
+        )
+    }
+
     environment {
         DOCKER_HUB_CREDS  = credentials('dockerhub-credentials')
-        DOCKER_HUB_USER   = "${DOCKER_HUB_CREDS_USR}"
+        SNYK_TOKEN        = credentials('snyk-token')
+        VAULT_TOKEN       = credentials('vault-token')
+        VAULT_ADDR        = 'http://localhost:8200'
         IMAGE_NAME_API    = "${DOCKER_HUB_CREDS_USR}/analytics-api"
         IMAGE_NAME_PROC   = "${DOCKER_HUB_CREDS_USR}/analytics-processor"
         IMAGE_TAG         = "${BUILD_NUMBER}"
@@ -22,6 +32,7 @@ pipeline {
                 echo "=== Checking out source ==="
                 checkout scm
                 sh 'git log --oneline -3'
+                echo "Target environment: ${params.DEPLOY_ENV}"
             }
         }
 
@@ -39,6 +50,46 @@ pipeline {
                 failure {
                     error "Tests failed — pipeline halted."
                 }
+            }
+        }
+
+        stage('Snyk security scan') {
+            steps {
+                echo "=== Running Snyk vulnerability scan ==="
+                sh '''
+                    export SNYK_TOKEN=${SNYK_TOKEN}
+
+                    # Authenticate
+                    /usr/local/bin/snyk auth ${SNYK_TOKEN}
+
+                    # Scan Python dependencies
+                    # --severity-threshold=high means pipeline fails
+                    # only on HIGH or CRITICAL vulns
+                    cd product-docker/app/api
+                    /usr/local/bin/snyk test \
+                        --file=requirements.txt \
+                        --package-manager=pip \
+                        --severity-threshold=high \
+                        --json > /tmp/snyk-report.json || SNYK_EXIT=$?
+
+                    # Always generate human readable report
+                    /usr/local/bin/snyk test \
+                        --file=requirements.txt \
+                        --package-manager=pip \
+                        --severity-threshold=high || true
+
+                    # Save report as build artifact
+                    cp /tmp/snyk-report.json \
+                        ${WORKSPACE}/docs/evidence/snyk-scan-${BUILD_NUMBER}.json
+
+                    echo "Snyk scan complete"
+
+                    # Fail pipeline on critical vulnerabilities
+                    if [ "${SNYK_EXIT}" = "1" ]; then
+                        echo "CRITICAL vulnerabilities found — halting pipeline"
+                        exit 1
+                    fi
+                '''
             }
         }
 
@@ -60,6 +111,26 @@ pipeline {
             }
         }
 
+        stage('Snyk container scan') {
+            steps {
+                echo "=== Scanning Docker images for vulnerabilities ==="
+                sh """
+                    export SNYK_TOKEN=${SNYK_TOKEN}
+
+                    # Scan the API image
+                    /usr/local/bin/snyk container test \
+                        ${IMAGE_NAME_API}:${IMAGE_TAG} \
+                        --severity-threshold=critical \
+                        --json > /tmp/snyk-container-report.json || true
+
+                    cp /tmp/snyk-container-report.json \
+                        ${WORKSPACE}/docs/evidence/snyk-container-${BUILD_NUMBER}.json
+
+                    echo "Container scan complete"
+                """
+            }
+        }
+
         stage('Push to Docker Hub') {
             steps {
                 sh """
@@ -74,70 +145,63 @@ pipeline {
             }
         }
 
+        stage('Inject secrets from Vault') {
+            steps {
+                echo "=== Pulling secrets from Vault → K8s ==="
+                sh """
+                    export VAULT_ADDR=${VAULT_ADDR}
+                    export VAULT_TOKEN=${VAULT_TOKEN}
+                    bash product-deployment-pipeline/scripts/inject-secrets.sh \
+                        ${params.DEPLOY_ENV}
+                """
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
-                echo "=== Deploying build #${IMAGE_TAG} to K8s ==="
+                echo "=== Deploying to ${params.DEPLOY_ENV} ==="
                 sh """
-                    kubectl set image deployment/analytics-api \
-                        analytics-api=${IMAGE_NAME_API}:${IMAGE_TAG} \
-                        -n ${K8S_NAMESPACE}
-
-                    kubectl set image deployment/analytics-processor \
-                        analytics-processor=${IMAGE_NAME_PROC}:${IMAGE_TAG} \
-                        -n ${K8S_NAMESPACE}
-
-                    kubectl rollout status deployment/analytics-api \
-                        -n ${K8S_NAMESPACE} --timeout=120s
-
-                    kubectl rollout status deployment/analytics-processor \
-                        -n ${K8S_NAMESPACE} --timeout=120s
+                    bash product-deployment-pipeline/scripts/deploy-env.sh \
+                        ${params.DEPLOY_ENV} ${IMAGE_TAG}
                 """
             }
         }
 
         stage('Smoke test') {
             steps {
-                echo "=== Running smoke test against live cluster ==="
+                echo "=== Smoke test against ${params.DEPLOY_ENV} ==="
                 sh """
                     sleep 10
+                    echo "Node IP: ${K8S_NODE_IP}"
 
-                    echo "Node IP from kubeconfig: ${K8S_NODE_IP}"
-
-                    # Health check must return 200
                     HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
                         --connect-timeout 10 \
                         http://${K8S_NODE_IP}:30080/health)
 
-                    echo "Health check returned: \${HTTP_CODE}"
-
+                    echo "Health check: \${HTTP_CODE}"
                     if [ "\${HTTP_CODE}" != "200" ]; then
-                        echo "Smoke test FAILED — health returned \${HTTP_CODE}"
+                        echo "FAILED — health returned \${HTTP_CODE}"
                         exit 1
                     fi
 
-                    echo "Health check PASSED"
-
-                    # Post a real event and verify 201
                     EVENT_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
                         --connect-timeout 10 \
                         -X POST http://${K8S_NODE_IP}:30080/api/v1/events \
                         -H "Content-Type: application/json" \
-                        -d '{"event_type":"ci_smoke_test","payload":{"build":"${IMAGE_TAG}"}}')
+                        -d "{\"event_type\":\"ci_smoke_test_${params.DEPLOY_ENV}\",\"payload\":{\"build\":\"${IMAGE_TAG}\"}}")
 
-                    echo "Event ingestion returned: \${EVENT_CODE}"
-
+                    echo "Event ingestion: \${EVENT_CODE}"
                     if [ "\${EVENT_CODE}" != "201" ]; then
-                        echo "Event ingestion FAILED — returned \${EVENT_CODE}"
+                        echo "FAILED — event returned \${EVENT_CODE}"
                         exit 1
                     fi
 
-                    echo "Event ingestion PASSED"
                     echo "=== All smoke tests passed ==="
                 """
             }
         }
 
-        stage('Cleanup local images') {
+        stage('Cleanup') {
             steps {
                 sh """
                     docker rmi ${IMAGE_NAME_API}:${IMAGE_TAG} || true
@@ -149,7 +213,7 @@ pipeline {
 
     post {
         success {
-            echo "SUCCESS — build #${IMAGE_TAG} deployed and smoke tested."
+            echo "SUCCESS — build #${IMAGE_TAG} deployed to ${params.DEPLOY_ENV}."
         }
         failure {
             echo "FAILED at stage: ${env.STAGE_NAME}"

@@ -9,3 +9,7 @@ __pycache__/
 target/
 *.log
 .kube/
+product-deployment-pipeline/scripts/st*infra*
+product-deployment-pipeline/scripts/resume*
+product-kubernetes/base/secret.yaml
+**/*secret*.yaml

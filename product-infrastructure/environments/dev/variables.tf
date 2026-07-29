@@ -19,13 +19,11 @@ variable "vpc_cidr" {
 variable "my_ip_cidr" {
   description = "Your local IP in CIDR notation for SSH access"
   type        = string
-  # We set this in terraform.tfvars — never hardcode IPs here
 }
 
 variable "ami_id" {
   description = "Ubuntu 22.04 LTS AMI for us-east-1"
   type        = string
-  # Ubuntu 22.04 LTS us-east-1 (verified June 2025)
   default     = "ami-0c7217cdde317cfec"
 }
 

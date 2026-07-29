@@ -1,16 +1,14 @@
 terraform {
   required_version = ">= 1.0"
-
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
   }
-
   backend "s3" {
     bucket  = "enterprise-deployment-tfstate-204998944371"
-    key     = "dev/terraform.tfstate"
+    key     = "prod/terraform.tfstate"
     region  = "us-east-1"
     encrypt = true
   }
@@ -20,14 +18,12 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ---------- VPC + Networking ----------
 module "vpc" {
   source      = "../../modules/vpc-networking"
   environment = var.environment
   vpc_cidr    = var.vpc_cidr
 }
 
-# ---------- Security baseline ----------
 module "security" {
   source      = "../../modules/security-baseline"
   environment = var.environment
@@ -35,7 +31,6 @@ module "security" {
   my_ip_cidr  = var.my_ip_cidr
 }
 
-# ---------- Kubernetes node (single EC2) ----------
 module "k8s_node" {
   source            = "../../modules/eks-cluster"
   environment       = var.environment
