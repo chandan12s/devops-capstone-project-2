@@ -58,9 +58,7 @@ pipeline {
                 echo "=== Running Snyk vulnerability scan ==="
                 sh '''
                     export SNYK_TOKEN=${SNYK_TOKEN}
-
-                    # Authenticate
-                    /usr/local/bin/snyk auth ${SNYK_TOKEN}
+                    SNYK_EXIT=0
 
                     # Scan Python dependencies
                     # --severity-threshold=high means pipeline fails
