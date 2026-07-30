@@ -24,13 +24,13 @@ case ${ENVIRONMENT} in
 esac
 
 echo "--- Applying base manifests ---"
-kubectl apply -f /mnt/c/Users/shivc/Desktop/enterprise-product-deployment/product-kubernetes/base/namespace.yaml
+kubectl apply -f /mnt/c/Users/shivc/Desktop/enterprise-deployment-platform/product-kubernetes/base/namespace.yaml
 
-kubectl apply -f /mnt/c/Users/shivc/Desktop/enterprise-product-deployment/product-kubernetes/base/
+kubectl apply -f /mnt/c/Users/shivc/Desktop/enterprise-deployment-platform/product-kubernetes/base/
 
 echo "--- Applying ${ENVIRONMENT} config overlay ---"
 kubectl apply -f \
-  /mnt/c/Users/shivc/Desktop/enterprise-product-deployment/product-kubernetes/overlays/${ENVIRONMENT}/configmap-patch.yaml
+  /mnt/c/Users/shivc/Desktop/enterprise-deployment-platform/product-kubernetes/overlays/${ENVIRONMENT}/configmap-patch.yaml
 
 echo "--- Scaling API to ${API_REPLICAS} replicas for ${ENVIRONMENT} ---"
 # Use patch instead of apply for replica changes — avoids selector conflict
