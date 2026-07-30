@@ -20,15 +20,15 @@ fi
 # Apply base manifests
 echo "--- Applying base manifests ---"
 kubectl apply -f \
-  ../../product-kubernetes/base/namespace.yaml
+  /mnt/c/Users/shivc/Desktop/enterprise-deployment-platform/product-kubernetes/base/namespace.yaml
 
 kubectl apply -f \
-  ../../product-kubernetes/base/
+  /mnt/c/Users/shivc/Desktop/enterprise-deployment-platform/product-kubernetes/base/
 
 # Apply environment-specific overlay (patches override base)
 echo "--- Applying ${ENVIRONMENT} overlay ---"
 kubectl apply -f \
-  ../../product-kubernetes/overlays/${ENVIRONMENT}/
+  /mnt/c/Users/shivc/Desktop/enterprise-deployment-platform/product-kubernetes/overlays/${ENVIRONMENT}/
 
 # Update image tags to exact build
 echo "--- Updating image tags to ${IMAGE_TAG} ---"
