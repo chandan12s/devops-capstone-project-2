@@ -33,7 +33,6 @@ pipeline {
                 checkout scm
                 sh 'git log --oneline -3'
                 echo "Target environment: ${params.DEPLOY_ENV}"
-                // Ensure evidence directory always exists in workspace
                 sh 'mkdir -p ${WORKSPACE}/docs/evidence'
             }
         }
@@ -59,24 +58,11 @@ pipeline {
             steps {
                 echo "=== Running Snyk vulnerability scan ==="
                 sh '''
-                    # Ensure evidence dir exists
                     mkdir -p ${WORKSPACE}/docs/evidence
-
-                    # Install deps first — Snyk pip scanning needs
-                    # packages installed to resolve dependency tree
                     pip3 install -r product-docker/app/api/requirements.txt \
                         --quiet --break-system-packages
-
-                    # Authenticate with Snyk
                     /usr/local/bin/snyk auth ${SNYK_TOKEN}
-
-                    # Run scan — use --command=python3 so Snyk finds
-                    # the installed packages correctly
-                    # Exit code 0 = no issues
-                    # Exit code 1 = vulnerabilities found above threshold
-                    # Exit code 2 = scan error (we handle separately)
                     cd product-docker/app/api
-
                     /usr/local/bin/snyk test \
                         --file=requirements.txt \
                         --package-manager=pip \
@@ -86,27 +72,18 @@ pipeline {
                         --json-file-output=${WORKSPACE}/docs/evidence/snyk-scan-${BUILD_NUMBER}.json \
                         2>/tmp/snyk-stderr.txt
                     SNYK_EXIT=$?
-
-                    echo "Snyk exit code: ${SNYK_EXIT}"
-
-                    # Also run human-readable output for console
                     /usr/local/bin/snyk test \
                         --file=requirements.txt \
                         --package-manager=pip \
                         --command=python3 \
                         --severity-threshold=high || true
-
-                    # Exit 0 = clean, Exit 1 = vulns found
-                    # Exit 2 = error (treat as warning, not failure)
                     if [ "${SNYK_EXIT}" = "1" ]; then
-                        echo "HIGH/CRITICAL vulnerabilities found — halting pipeline"
+                        echo "HIGH/CRITICAL vulnerabilities found — halting"
                         exit 1
                     elif [ "${SNYK_EXIT}" = "2" ]; then
-                        echo "Snyk scan encountered an error but continuing pipeline"
-                        echo "Check ${WORKSPACE}/docs/evidence/snyk-scan-${BUILD_NUMBER}.json"
-                        cat /tmp/snyk-stderr.txt || true
+                        echo "Snyk error — continuing with warning"
                     else
-                        echo "Snyk scan passed — no high/critical vulnerabilities"
+                        echo "Snyk scan passed"
                     fi
                 '''
             }
@@ -132,24 +109,18 @@ pipeline {
 
         stage('Snyk container scan') {
             steps {
-                echo "=== Scanning Docker images for vulnerabilities ==="
+                echo "=== Scanning Docker images ==="
                 sh """
                     mkdir -p ${WORKSPACE}/docs/evidence
-
                     /usr/local/bin/snyk container test \
                         ${IMAGE_NAME_API}:${IMAGE_TAG} \
                         --severity-threshold=critical \
                         --json \
                         --json-file-output=${WORKSPACE}/docs/evidence/snyk-container-${BUILD_NUMBER}.json \
-                        2>/tmp/snyk-container-stderr.txt || CONTAINER_EXIT=\$?
-
-                    echo "Container scan exit code: \${CONTAINER_EXIT:-0}"
-
-                    # Show human readable output
+                        2>/tmp/snyk-container-stderr.txt || true
                     /usr/local/bin/snyk container test \
                         ${IMAGE_NAME_API}:${IMAGE_TAG} \
                         --severity-threshold=critical || true
-
                     echo "Container scan complete"
                 """
             }
@@ -194,34 +165,52 @@ pipeline {
         stage('Smoke test') {
             steps {
                 echo "=== Smoke test against ${params.DEPLOY_ENV} ==="
-                sh """
-                    sleep 10
-                    echo "Node IP: ${K8S_NODE_IP}"
+                script {
+                    def nodeIp = env.K8S_NODE_IP
+                    def buildTag = env.IMAGE_TAG
+                    def deployEnv = params.DEPLOY_ENV
 
-                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
-                        --connect-timeout 10 \
-                        http://${K8S_NODE_IP}:30080/health)
+                    sh """
+                        sleep 10
+                        echo "Node IP: ${nodeIp}"
 
-                    echo "Health check: \${HTTP_CODE}"
-                    if [ "\${HTTP_CODE}" != "200" ]; then
-                        echo "FAILED — health returned \${HTTP_CODE}"
-                        exit 1
-                    fi
+                        HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
+                            --connect-timeout 10 \
+                            http://${nodeIp}:30080/health)
 
-                    EVENT_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
-                        --connect-timeout 10 \
-                        -X POST http://${K8S_NODE_IP}:30080/api/v1/events \
-                        -H "Content-Type: application/json" \
-                        -d "{\"event_type\":\"ci_smoke_test_${params.DEPLOY_ENV}\",\"payload\":{\"build\":\"${IMAGE_TAG}\"}}")
+                        echo "Health check: \${HTTP_CODE}"
+                        if [ "\${HTTP_CODE}" != "200" ]; then
+                            echo "FAILED — health returned \${HTTP_CODE}"
+                            exit 1
+                        fi
+                        echo "Health check PASSED"
+                    """
 
-                    echo "Event ingestion: \${EVENT_CODE}"
-                    if [ "\${EVENT_CODE}" != "201" ]; then
-                        echo "FAILED — event returned \${EVENT_CODE}"
-                        exit 1
-                    fi
+                    // Write JSON payload to a temp file — completely avoids
+                    // any shell or Groovy quoting issues with curly braces
+                    writeFile file: '/tmp/smoke-payload.json',
+                              text: """{"event_type":"ci_smoke_test","payload":{"build":"${buildTag}","env":"${deployEnv}"}}"""
 
-                    echo "=== All smoke tests passed ==="
-                """
+                    sh """
+                        echo "Payload:"
+                        cat /tmp/smoke-payload.json
+
+                        EVENT_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
+                            --connect-timeout 10 \
+                            -X POST http://${nodeIp}:30080/api/v1/events \
+                            -H "Content-Type: application/json" \
+                            -d @/tmp/smoke-payload.json)
+
+                        echo "Event ingestion: \${EVENT_CODE}"
+                        if [ "\${EVENT_CODE}" != "201" ]; then
+                            echo "FAILED — event returned \${EVENT_CODE}"
+                            exit 1
+                        fi
+
+                        echo "=== All smoke tests passed ==="
+                        rm -f /tmp/smoke-payload.json
+                    """
+                }
             }
         }
 
