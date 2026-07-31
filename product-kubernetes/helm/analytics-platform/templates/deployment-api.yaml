@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.api.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.api.name }}
+    customer: {{ .Release.Name }}
+    environment: {{ .Values.global.environment }}
+    version: {{ .Values.global.imageTag | quote }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.api.name }}
+      customer: {{ .Release.Name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.api.name }}
+        customer: {{ .Release.Name }}
+        environment: {{ .Values.global.environment }}
+        version: {{ .Values.global.imageTag | quote }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: {{ .Values.api.name }}
+          image: {{ .Values.api.image }}:{{ .Values.global.imageTag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.api.port }}
+          envFrom:
+            - configMapRef:
+                name: analytics-config
+          resources:
+            requests:
+              memory: {{ .Values.api.resources.requests.memory | quote }}
+              cpu: {{ .Values.api.resources.requests.cpu | quote }}
+            limits:
+              memory: {{ .Values.api.resources.limits.memory | quote }}
+              cpu: {{ .Values.api.resources.limits.cpu | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.api.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3

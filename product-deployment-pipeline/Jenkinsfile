@@ -7,6 +7,12 @@ pipeline {
             choices: ['dev', 'stage', 'prod'],
             description: 'Target deployment environment'
         )
+
+        booleanParam(
+            name: 'DEPLOY_ALL_CUSTOMERS',
+            defaultValue: false,
+            description: 'Deploy to all 10 customer environments via Helm'
+        )
     }
 
     environment {
@@ -161,6 +167,19 @@ pipeline {
                 """
             }
         }
+
+        stage('Helm — deploy to customers') {
+            when {
+                expression { params.DEPLOY_ALL_CUSTOMERS == true }
+            }
+            steps {
+                echo "=== Helm multi-customer deployment ==="
+                sh """
+                    bash product-deployment-pipeline/scripts/helm-deploy-customers.sh \
+                ${IMAGE_TAG}
+                """
+    }
+}
 
         stage('Smoke test') {
             steps {

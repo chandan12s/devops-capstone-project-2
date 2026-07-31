@@ -1,0 +1,16 @@
+global:
+  environment: prod
+  imageTag: latest
+  logLevel: WARNING
+api:
+  replicas: 1
+  nodePort: 30090
+  processInterval: "30"
+features:
+  advancedAnalytics: false
+  dataExport: true
+  apiRateLimit: 50
+compliance:
+  tier: standard
+  logRetentionDays: 30
+  auditEnabled: false

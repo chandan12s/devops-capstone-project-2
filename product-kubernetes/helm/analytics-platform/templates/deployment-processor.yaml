@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.processor.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.processor.name }}
+    customer: {{ .Release.Name }}
+    environment: {{ .Values.global.environment }}
+spec:
+  replicas: {{ .Values.processor.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.processor.name }}
+      customer: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.processor.name }}
+        customer: {{ .Release.Name }}
+        environment: {{ .Values.global.environment }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: {{ .Values.processor.name }}
+          image: {{ .Values.processor.image }}:{{ .Values.global.imageTag }}
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: analytics-config
+          resources:
+            requests:
+              memory: {{ .Values.processor.resources.requests.memory | quote }}
+              cpu: {{ .Values.processor.resources.requests.cpu | quote }}
+            limits:
+              memory: {{ .Values.processor.resources.limits.memory | quote }}
+              cpu: {{ .Values.processor.resources.limits.cpu | quote }}

@@ -1,0 +1,55 @@
+global:
+  environment: dev
+  dockerUser: chandans12
+  imageTag: latest
+  logLevel: INFO
+
+api:
+  name: analytics-api
+  image: chandans12/analytics-api
+  replicas: 1
+  port: 5000
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "150m"
+  nodePort: 30080
+  processInterval: "10"
+
+processor:
+  name: analytics-processor
+  image: chandans12/analytics-processor
+  replicas: 1
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "25m"
+    limits:
+      memory: "64Mi"
+      cpu: "75m"
+  processInterval: "10"
+
+webapp:
+  name: analytics-webapp
+  replicas: 1
+  nodePort: 30081
+  resources:
+    requests:
+      memory: "16Mi"
+      cpu: "10m"
+    limits:
+      memory: "32Mi"
+      cpu: "50m"
+
+features:
+  advancedAnalytics: false
+  dataExport: true
+  apiRateLimit: 100
+
+compliance:
+  tier: standard
+  logRetentionDays: 30
+  auditEnabled: false

@@ -1,0 +1,16 @@
+global:
+  environment: prod
+  imageTag: latest
+  logLevel: DEBUG
+api:
+  replicas: 1
+  nodePort: 30094
+  processInterval: "5"
+features:
+  advancedAnalytics: true
+  dataExport: true
+  apiRateLimit: 1000
+compliance:
+  tier: enterprise
+  logRetentionDays: 180
+  auditEnabled: true

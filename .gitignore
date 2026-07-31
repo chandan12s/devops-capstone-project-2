@@ -5,6 +5,8 @@ __pycache__/
 .terraform/
 *.tfstate
 *.tfstate.backup
+product-infra*/*/*/*tfvars*
+terraform.tfvars
 .terraform.lock.hcl
 target/
 *.log

@@ -1,0 +1,16 @@
+Analytics Platform deployed successfully!
+
+Customer:     {{ .Release.Name }}
+Environment:  {{ .Values.global.environment }}
+Namespace:    {{ .Release.Namespace }}
+Image tag:    {{ .Values.global.imageTag }}
+Compliance:   {{ .Values.compliance.tier }}
+
+Access the API:
+  http://<NODE_IP>:{{ .Values.api.nodePort }}/health
+  http://<NODE_IP>:{{ .Values.api.nodePort }}/api/v1/stats
+
+Features enabled:
+  Advanced Analytics: {{ .Values.features.advancedAnalytics }}
+  Data Export:        {{ .Values.features.dataExport }}
+  API Rate Limit:     {{ .Values.features.apiRateLimit }} req/min

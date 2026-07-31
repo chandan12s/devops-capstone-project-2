@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: analytics-platform
+    customer: {{ .Release.Name }}
+    environment: {{ .Values.global.environment }}
+data:
+  ENVIRONMENT: {{ .Values.global.environment | quote }}
+  LOG_LEVEL: {{ .Values.global.logLevel | quote }}
+  APP_VERSION: {{ .Values.global.imageTag | quote }}
+  PROCESS_INTERVAL: {{ .Values.api.processInterval | quote }}
+  FEATURE_ADVANCED_ANALYTICS: {{ .Values.features.advancedAnalytics | quote }}
+  FEATURE_DATA_EXPORT: {{ .Values.features.dataExport | quote }}
+  API_RATE_LIMIT: {{ .Values.features.apiRateLimit | quote }}
+  COMPLIANCE_TIER: {{ .Values.compliance.tier | quote }}
+  LOG_RETENTION_DAYS: {{ .Values.compliance.logRetentionDays | quote }}
+  AUDIT_ENABLED: {{ .Values.compliance.auditEnabled | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: analytics-platform
+    customer: {{ .Release.Name }}
+data:
+  nginx.conf: |
+    events { worker_connections 1024; }
+    http {
+      server {
+        listen 80;
+        server_name _;
+        location /health {
+          return 200 'webapp-healthy\n';
+          add_header Content-Type text/plain;
+        }
+        location /api/ {
+          proxy_pass http://analytics-api-svc:80;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+        }
+        location / {
+          return 200 'Analytics Platform - {{ .Release.Name }} - {{ .Values.global.environment }}\n';
+          add_header Content-Type text/plain;
+        }
+      }
+    }
