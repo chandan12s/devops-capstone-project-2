@@ -11,7 +11,7 @@ pipeline {
         booleanParam(
             name: 'DEPLOY_ALL_CUSTOMERS',
             defaultValue: false,
-            description: 'Deploy to all 10 customer environments via Helm'
+            description: 'Deploy to all customer environments via Helm'
         )
     }
 
