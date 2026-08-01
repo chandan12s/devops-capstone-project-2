@@ -21,3 +21,15 @@ variable "subnet_id" {
 variable "security_group_id" {
   type = string
 }
+
+variable "use_spot" {
+  description = "Use spot instance for cost savings (~70% cheaper)"
+  type        = bool
+  default     = false
+}
+
+variable "spot_max_price" {
+  description = "Max spot price — on-demand price so we never overpay"
+  type        = string
+  default     = "0.0208"
+}

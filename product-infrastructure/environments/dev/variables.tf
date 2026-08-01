@@ -38,3 +38,13 @@ variable "key_name" {
   type        = string
   default     = "devops-capstone-key2"
 }
+
+variable "use_spot" {
+  type    = bool
+  default = false
+}
+
+variable "spot_max_price" {
+  type    = string
+  default = "0.0208"
+}

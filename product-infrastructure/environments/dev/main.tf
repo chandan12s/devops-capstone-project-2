@@ -45,4 +45,6 @@ module "k8s_node" {
   key_name          = var.key_name
   subnet_id         = module.vpc.public_subnet_id
   security_group_id = module.security.k8s_sg_id
+  use_spot          = var.use_spot
+  spot_max_price    = var.spot_max_price
 }
