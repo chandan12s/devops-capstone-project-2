@@ -12,7 +12,8 @@ terraform {
     bucket  = "enterprise-deployment-tfstate-204998944371"
     key     = "dev/terraform.tfstate"
     region  = "us-east-1"
-    encrypt = true
+    encrypt        = true
+    dynamodb_table = "enterprise-deployment-tf-locks"
   }
 }
 

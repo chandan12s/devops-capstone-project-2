@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-api-green
+  namespace: analytics
+  labels:
+    app: analytics-api
+    slot: green
+    version: "canary"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-api
+      slot: green
+  template:
+    metadata:
+      labels:
+        app: analytics-api
+        slot: green
+        version: "canary"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: analytics-api
+          image: chandans12/analytics-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: analytics-config
+          env:
+            - name: SLOT
+              value: "green"
+            - name: APP_VERSION
+              value: "canary-green"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "150m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10

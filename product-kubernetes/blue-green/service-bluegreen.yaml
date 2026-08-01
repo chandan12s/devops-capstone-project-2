@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-api-bluegreen
+  namespace: analytics
+  labels:
+    app: analytics-api
+  annotations:
+    # Track which slot is currently active
+    deployment.kubernetes.io/active-slot: "blue"
+spec:
+  type: NodePort
+  # This selector is what we change to switch traffic
+  # Change slot: blue → slot: green to switch
+  selector:
+    app: analytics-api
+    slot: blue
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 5000
+      nodePort: 30082
