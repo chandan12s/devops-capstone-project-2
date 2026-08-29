@@ -357,62 +357,62 @@ bash product-deployment-pipeline/scripts/inject-secrets.sh dev
 ```
 enterprise-product-deployment/
 ├── product-deployment-pipeline/
-│   ├── Jenkinsfile                          # 9-stage CI/CD pipeline
+│   ├── Jenkinsfile                        
 │   └── scripts/
-│       ├── resume-day.sh                    # Start of day: IP refresh + EC2 start
-│       ├── stop-infra.sh                    # End of day: stop EC2
-│       ├── start-infra.sh                   # Start EC2 and restore kubectl
-│       ├── deploy-env.sh                    # Deploy to a specific environment
-│       ├── helm-deploy-customers.sh         # Deploy Helm chart to all 10 customers
-│       ├── bluegreen-switch.sh              # Switch Blue/Green traffic
-│       ├── inject-secrets.sh                # Pull from Vault → K8s Secret
-│       └── refresh-kubeconfig.sh            # Repatch TLS cert after infra recreate
+│       ├── resume-day.sh                    
+│       ├── stop-infra.sh                   
+│       ├── start-infra.sh                   
+│       ├── deploy-env.sh                   
+│       ├── helm-deploy-customers.sh        
+│       ├── bluegreen-switch.sh              
+│       ├── inject-secrets.sh               
+│       └── refresh-kubeconfig.sh          
 │
 ├── product-infrastructure/
 │   ├── modules/
-│   │   ├── vpc-networking/                  # VPC, IGW, subnet, route table
-│   │   ├── security-baseline/               # Security group with IP restrictions
-│   │   └── eks-cluster/                     # EC2, Elastic IP, spot instance support
+│   │   ├── vpc-networking/                  
+│   │   ├── security-baseline/               
+│   │   └── eks-cluster/           
 │   └── environments/
-│       ├── dev/                             # main.tf, variables.tf, outputs.tf, terraform.tfvars
-│       ├── stage/                           # Separate state: stage/terraform.tfstate
-│       └── prod/                            # Separate state: prod/terraform.tfstate
+│       ├── dev/                           
+│       ├── stage/                          
+│       └── prod/                           
 │
 ├── product-kubernetes/
-│   ├── base/                                # Common manifests (namespace, configmaps, deployments, services)
+│   ├── base/                                
 │   ├── overlays/
-│   │   ├── dev/                             # Dev-specific configmap patch (DEBUG log level)
-│   │   ├── stage/                           # Stage-specific (INFO log level)
-│   │   └── prod/                            # Prod-specific (WARNING log level)
-│   ├── blue-green/                          # Blue + Green deployments + traffic switch service
-│   ├── hpa.yaml                             # HorizontalPodAutoscaler (1-3 replicas, CPU 50%)
-│   ├── backup-cronjob.yaml                  # Backup job every 6 hours
+│   │   ├── dev/                             
+│   │   ├── stage/                         
+│   │   └── prod/                          
+│   ├── blue-green/                         
+│   ├── hpa.yaml                            
+│   ├── backup-cronjob.yaml                  
 │   └── helm/
 │       └── analytics-platform/
 │           ├── Chart.yaml
-│           ├── values.yaml                  # Default values
-│           ├── templates/                   # Deployment, Service, ConfigMap, NOTES
-│           └── customer-values/             # 10 customer override files
+│           ├── values.yaml                 
+│           ├── templates/                 
+│           └── customer-values/           
 │
 ├── product-docker/
 │   ├── app/
-│   │   ├── api/                             # Flask API: app.py, test_app.py, requirements.txt
-│   │   ├── data-processor/                  # Background worker: processor.py
-│   │   └── webapp/                          # Nginx: nginx.conf
-│   ├── Dockerfile.api                       # Non-root, python:3.11-slim, gunicorn
-│   └── Dockerfile.processor                 # Non-root, python:3.11-slim
+│   │   ├── api/                           
+│   │   ├── data-processor/                 
+│   │   └── webapp/                        
+│   ├── Dockerfile.api                  
+│   └── Dockerfile.processor               
 │
 ├── monitoring/
 │   ├── efk/
-│   │   └── fluentd-remote.yaml              # Fluentd DaemonSet on K8s
+│   │   └── fluentd-remote.yaml              
 │   └── local-efk/
-│       ├── docker-compose.yml               # Elasticsearch + Kibana + Fluentd locally
-│       └── fluentd/conf/fluent.conf         # Fluentd config: Docker socket log collection
+│       ├── docker-compose.yml             
+│       └── fluentd/conf/fluent.conf        
 │
 └── docs/
     ├── architecture.md
     ├── rto-rpo-runbook.md
-    ├── evidence/                            # Screenshots and output files per phase/task
+    ├── evidence/
     └── incident-runbooks/
         ├── RCA-001-k8s-node-failure.md
         ├── RCA-002-registry-outage.md
